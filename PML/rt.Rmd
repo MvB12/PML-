@@ -1,0 +1,98 @@
+---
+title: PML report
+author: "by Vishnu"
+output:
+  html_document:
+    fig_height: 9
+    fig_width: 9
+---
+
+
+## Preprocessing of Data 
+```{r, cache = T}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+ 
+### Data Reading
+we can read the two csv files into two data frames.
+```{r, cache = T}
+trainRaw <- read.csv("./data/p-training.csv")
+testRaw <- read.csv("./data/p-testing.csv")
+dim(trainRaw)
+
+dim(testRaw)
+``` 
+
+### Data Cleaning
+Claening gets rid of missing valus of some observations and meaning less values.
+```{r, cache = T}
+sum(complete.cases(trainRaw))
+```
+Removing observations with no values
+```{r, cache = T}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0] 
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0] 
+```  
+getting rid of pointless values
+```{r, cache = T}
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+
+### Data Slicing	
+ Splitting data into standard 70 and 30.
+```{r, cache = T}
+set.seed(22328)
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+
+## Modeling of Data
+predictive model for activity recognition using Random forest algorithm with 5fold cross validation.	
+```{r, cache = T}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+estimating performance of model on validation sets.
+```{r, cache = T}
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+```
+```{r, cache = T}
+accuracy <- postResample(predictRf, testData$classe)
+accuracy
+oose <- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+oose
+```
+estimated accuracy of the model = 99.43% 
+the estimated out-of-sample error = 0.58%.
+
+## Test data prediction 
+```{r, cache = T}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```  
+
+## Figures
+1.Visualization of correalation matrix
+```{r, cache = T}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="color")
+```
+2.Visualization of decision tree
+```{r, cache = T}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel) # fast plot
+```
